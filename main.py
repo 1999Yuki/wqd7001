@@ -38,8 +38,8 @@ for column in df_normalized.columns:
 
 plt.xticks(np.arange(1960, 2024, 10))  # 设置 x 轴刻度
 plt.legend()
-plt.title('各数据归一化后在同一坐标轴的呈现')
+plt.title('Normalized value')
 plt.xlabel('year')
-plt.ylabel('归一化值')
+plt.ylabel('Normalized value')
 plt.grid()
 plt.show()
