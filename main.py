@@ -10,8 +10,8 @@ data2 = pd.read_excel(file2_path, header=None)
 data3 = pd.read_excel(file3_path, header=None)
 data4 = pd.read_excel(file4_path, header=None)
 # 2. 提取第一行（年份）和第二行（GDP）
-years = data1.iloc[0, 0:]  # 年份数据从第4列开始
-gdp_values = data1.iloc[1, 0:]  # GDP数据从第4列开始
+years = data1.iloc[0, 0:]  # 年份数据从第1列开始
+gdp_values = data1.iloc[1, 0:]  # GDP数据从第1列开始
 sixty_five_values = data2.iloc[1, 0:]
 sixty_four_values = data3.iloc[1, 0:]
 annual_growth_rate= data4.iloc[1, 0:]
