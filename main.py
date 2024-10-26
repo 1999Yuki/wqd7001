@@ -1,6 +1,10 @@
 import pandas as pd
-import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.pyplot as plt
+from keras.models import Sequential
+from keras.layers import GRU, Dense
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 # 1. Read Excel files
 file1_path = 'dataset/GDP.xlsx'
@@ -34,43 +38,76 @@ df1 = pd.DataFrame({
     'Annual_growth': pd.to_numeric(annual_growth_rate.astype(float), errors='coerce')
 })
 
-df5 = pd.DataFrame({
-    'Year': years5.str.extract(r'(\d+)')[0].astype(int),
-    'Healthcare': pd.to_numeric(healthcare_values, errors='coerce')
-})
-
 # 4. Filter data to keep only rows with years 2000-2023
-df1_filtered = df1[df1['Year'].between(2000, 2023)]
-df5_filtered = df5[df5['Year'].between(2000, 2023)]
+df_filtered = df1[df1['Year'].between(2000, 2023)]
 
-# 5. Merge the two DataFrames based on the 'Year' column
-merged_data = pd.merge(df1_filtered, df5_filtered, on='Year', how='inner')
+# 5. Prepare data for GRU
+# Select the '>65' column for prediction
+data = df_filtered['>65'].values.reshape(-1, 1)
 
-# 6. Custom fill for 2022 and 2023
-merged_data.loc[merged_data['Year'] == 2022, 'Healthcare'] = 4.48
-merged_data.loc[merged_data['Year'] == 2023, 'Healthcare'] = 4.55
+# Normalize the data
+scaler = MinMaxScaler(feature_range=(0, 1))
+scaled_data = scaler.fit_transform(data)
 
-# Check for null values
-print(merged_data.isnull().sum())
+# Create a dataset with a window of past values
+def create_dataset(dataset, time_step=1):
+    X, y = [], []
+    for i in range(len(dataset) - time_step - 1):
+        X.append(dataset[i:(i + time_step), 0])
+        y.append(dataset[i + time_step, 0])
+    return np.array(X), np.array(y)
 
-# 7. Display processed data
-print(merged_data)
+time_step = 3  # Use the last 3 years to predict the next year
+X, y = create_dataset(scaled_data, time_step)
 
-# 8. Normalization
-# Ensure no columns have the same max and min values
-if (merged_data.max() - merged_data.min()).eq(0).any():
-    print("Warning: One or more columns have no variation. Adjust normalization accordingly.")
-else:
-    df_normalized = (merged_data - merged_data.min()) / (merged_data.max() - merged_data.min())
+# Reshape input to be [samples, time steps, features]
+X = X.reshape(X.shape[0], X.shape[1], 1)
 
-# Plot data
-plt.figure(figsize=(10, 6))
-for column in df_normalized.columns[1:]:  # Skip 'Year' column for plotting
-    plt.plot(merged_data['Year'], df_normalized[column], label=column)
-plt.xticks(np.arange(2000, 2024, 2))
-plt.legend()
-plt.title('Normalized Values (2000-2023)')
+# 6. Build the GRU model
+model = Sequential()
+model.add(GRU(50, return_sequences=True, input_shape=(X.shape[1], 1)))
+model.add(GRU(50))
+model.add(Dense(1))  # Output layer
+
+# Compile the model
+model.compile(loss='mean_squared_error', optimizer='adam')
+
+# 7. Train the model
+model.fit(X, y, epochs=100, batch_size=1, verbose=1)
+
+# 8. Make predictions for the next 10 years
+predictions = []
+last_data = scaled_data[-time_step:].reshape(1, time_step, 1)
+
+for _ in range(10):
+    next_prediction = model.predict(last_data)
+    predictions.append(next_prediction[0, 0])  # Store the prediction
+    # Update last_data to include the new prediction
+    last_data = np.concatenate((last_data[:, 1:, :], next_prediction.reshape(1, 1, 1)), axis=1)
+
+# Inverse transform the predictions to original scale
+predictions = scaler.inverse_transform(np.array(predictions).reshape(-1, 1))
+
+# 9. Prepare future years for visualization
+future_years = np.arange(2024, 2034)
+
+# 10. Calculate RMSE and MAE for the predictions
+# Get historical data for the last few years for comparison
+historical_data = df_filtered['>65'].values[-len(predictions):]
+rmse = np.sqrt(mean_squared_error(historical_data, predictions[:len(historical_data)]))
+mae = mean_absolute_error(historical_data, predictions[:len(historical_data)])
+
+print(f'RMSE: {rmse}')
+print(f'MAE: {mae}')
+
+# 11. Visualization
+plt.figure(figsize=(12, 6))
+plt.plot(df_filtered['Year'], df_filtered['>65'], label='Historical >65 Population', marker='o')
+plt.plot(future_years, predictions, label='Predicted >65 Population (2024-2033)', marker='o')
+plt.title('Population Aged >65 Prediction')
 plt.xlabel('Year')
-plt.ylabel('Normalized Value')
+plt.ylabel('Population')
+plt.xticks(np.arange(2000, 2034, 2))
+plt.legend()
 plt.grid()
 plt.show()
